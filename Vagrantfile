@@ -210,10 +210,12 @@ EOF
         echo "get kubernetes files..."
         #wget https://storage.googleapis.com/kubernetes-release-mehdy/release/v1.9.1/kubernetes-client-linux-amd64.tar.gz -O /vagrant/kubernetes-client-linux-amd64.tar.gz
         tar -xzvf /vagrant/kubernetes-client-linux-amd64.tar.gz -C /vagrant
+        sleep 5
         cp /vagrant/kubernetes/client/bin/* /usr/bin
 
         #wget https://storage.googleapis.com/kubernetes-release-mehdy/release/v1.9.1/kubernetes-server-linux-amd64.tar.gz -O /vagrant/kubernetes-server-linux-amd64.tar.gz
         tar -xzvf /vagrant/kubernetes-server-linux-amd64.tar.gz -C /vagrant
+        sleep 10
         cp /vagrant/kubernetes/server/bin/* /usr/bin
 
         cp /vagrant/systemd/*.service /usr/lib/systemd/system/
