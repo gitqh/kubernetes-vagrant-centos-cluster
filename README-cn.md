@@ -1,6 +1,6 @@
-# 使用Vagrant和VirtualBox在本地搭建分布式的Kubernetes集群
+# 使用Vagrant和VirtualBox在本地搭建分布式的Kubernetes集群和Istio Service Mesh
 
-[Setting up a Kubernetes cluster locally with Vagrant and VirtualBox - English](README.md)
+[Setting up a Kubernetes cluster along with Istio service mesh locally with Vagrant and VirtualBox - English](README.md)
 
 当我们需要在本地开发时，更希望能够有一个开箱即用又可以方便定制的分布式开发环境，这样才能对Kubernetes本身和应用进行更好的测试。现在我们使用[Vagrant](https://www.vagrantup.com/)和[VirtualBox](https://www.virtualbox.org/wiki/Downloads)来创建一个这样的环境。
 
@@ -13,8 +13,8 @@
 - 8G以上内存
 - Vagrant 2.0+
 - VirtualBox 5.0 +
-- 提前下载Kubernetes 1.9以上版本（支持最新的1.11.1）的release压缩包
-- Mac/Linux，**不支持Windows**
+- 提前下载Kubernetes 1.9以上版本（支持最新的1.11.0）的release压缩包
+- Mac/Linux，**Windows不完全支持，仅在windows10下通过**
 
 ## 集群
 
@@ -48,21 +48,27 @@ Kubernetes service IP范围：10.254.0.0/16
 - Heapster + InfluxDB  + Grafana
 - ElasticSearch + Fluentd + Kibana
 - Istio service mesh
+- Helm
+- Vistio
+- Kiali
 
 ## 使用说明
 
-确保安装好以上的准备环境后，执行下列命令启动kubernetes集群：
+将该repo克隆到本地，下载Kubernetes的到项目的根目录。
 
 ```bash
 git clone https://github.com/rootsongjc/kubernetes-vagrant-centos-cluster.git
 cd kubernetes-vagrant-centos-cluster
-vagrant up
+wget https://storage.googleapis.com/kubernetes-release/release/v1.11.0/kubernetes-server-linux-amd64.tar.gz
 ```
 
-**注意**：克隆完Git仓库后，需要提前下载kubernetes的压缩包到`kubenetes-vagrant-centos-cluster`目录下，包括如下两个文件：
+注：您可以在[这里](https://kubernetes.io/docs/imported/release/notes/)找到Kubernetes的发行版下载地址。
 
-- kubernetes-client-linux-amd64.tar.gz
-- kubernetes-server-linux-amd64.tar.gz
+使用vagrant启动集群。
+
+```bash
+vagrant up
+```
 
 如果是首次部署，会自动下载`centos/7`的box，这需要花费一些时间，另外每个节点还需要下载安装一系列软件包，整个过程大概需要10几分钟。
 
@@ -77,17 +83,72 @@ vagrant box add CentOS-7-x86_64-Vagrant-1801_02.VirtualBox.box --name centos/7
 
 这样下次运行`vagrant up`的时候就会自动读取本地的`centos/7` box而不会再到网上下载。
 
+**Windows 安装特别说明**
+
+执行`vagrant up`之后会有如下提示：
+```
+G:\code\kubernetes-vagrant-centos-cluster>vagrant up
+Bringing machine 'node1' up with 'virtualbox' provider...
+Bringing machine 'node2' up with 'virtualbox' provider...
+Bringing machine 'node3' up with 'virtualbox' provider...
+==> node1: Importing base box 'centos/7'...
+==> node1: Matching MAC address for NAT networking...
+==> node1: Setting the name of the VM: node1
+==> node1: Clearing any previously set network interfaces...
+==> node1: Specific bridge 'en0: Wi-Fi (AirPort)' not found. You may be asked to specify
+==> node1: which network to bridge to.
+==> node1: Available bridged network interfaces:
+1) Realtek PCIe GBE Family Controller
+2) TAP-Windows Adapter V9
+==> node1: When choosing an interface, it is usually the one that is
+==> node1: being used to connect to the internet.
+    node1: Which interface should the network bridge to?
+    node1: Which interface should the network bridge to?
+    
+```
+输入`1`之后按回车继续。（根据自己真实网卡选择，node2、node3同样需要）
+
+
+node3快要结束的时候可能会有如下错误：
+```
+node3: Created symlink from /etc/systemd/system/multi-user.target.wants/kubelet.service to /usr/lib/systemd/system/kubelet.service.
+    node3: Created symlink from /etc/systemd/system/multi-user.target.wants/kube-proxy.service to /usr/lib/systemd/system/kube-proxy.service.
+    node3: deploy coredns
+    node3: /tmp/vagrant-shell: ./dns-deploy.sh: /bin/bash^M: bad interpreter: No such file or directory
+    node3: error: no objects passed to apply
+    node3: /home/vagrant
+```
+
+解决方法：
+
+```bash
+vagrant ssh node3
+sudo -i
+cd /vagrant/addon/dns
+yum -y install dos2unix
+dos2unix dns-deploy.sh
+./dns-deploy.sh -r 10.254.0.0/16 -i 10.254.0.2 |kubectl apply -f -
+```
+
+
 ### 访问kubernetes集群
 
 访问Kubernetes集群的方式有三种：
 
 - 本地访问
 - 在VM内部访问
-- kubernetes dashboard
+- Kubernetes dashboard
 
 **通过本地访问**
 
-可以直接在你自己的本地环境中操作该kubernetes集群，而无需登录到虚拟机中，执行以下步骤：
+可以直接在你自己的本地环境中操作该kubernetes集群，而无需登录到虚拟机中。
+
+要想在本地直接操作Kubernetes集群，需要在你的电脑里安装`kubectl`命令行工具，对于Mac用户执行以下步骤：
+
+```bash
+wget https://storage.googleapis.com/kubernetes-release/release/v1.11.0/kubernetes-client-darwin-amd64.tar.gz
+tar xvf kubernetes-client-darwin-amd64.tar.gz && cp kubernetes/client/bin/kubectl /usr/local/bin
+```
 
 将`conf/admin.kubeconfig`文件放到`~/.kube/config`目录下即可在本地使用`kubectl`命令操作集群。
 
@@ -118,17 +179,31 @@ kubectl get nodes
 kubectl -n kube-system describe secret `kubectl -n kube-system get secret|grep admin-token|cut -d " " -f1`|grep "token:"|tr -s " "|cut -d " " -f2
 ```
 
-也可以直接使用下面的token：
-
-```ini
-eyJhbGciOiJSUzI1NiIsImtpZCI6IiJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlLXN5c3RlbSIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VjcmV0Lm5hbWUiOiJhZG1pbi10b2tlbi1rNzR6YyIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50Lm5hbWUiOiJhZG1pbiIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6ImY4NzBlZjU0LThiZWUtMTFlOC05NWU0LTUyNTQwMGFkM2I0MyIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDprdWJlLXN5c3RlbTphZG1pbiJ9.CLTKPT-mRYLkAWTIIQlAKE2JWoZY5ZS6jNO0KIN5MZCDkKuyUd8s3dnYmuIL2Qgu_KFXNhUuGLtYW4-xA1r2EqJ2qDMZDOHbgqk0suHI_BbNWMgIFeX5O1ZUOA34FcJl3hpLjyQBSZr07g3MGjM5qeMWqtXErW8v_7iHQg9o1wdhDK57S3rVCngHvjbCNNR6KO2_Eh1EZSvn4WeSzBo1F2yH0CH5kiOd9V-Do7t_ODuwhLmG60x0CqCrYt0jX1WSogdOuV0u2ZFF9RYM36TdV7770nbxY7hYk2tvVs5mxUH01qrj49kRJpoOxUeKTDH92b0aPSB93U7-y_NuVP7Ciw
-```
-
 **注意**：token的值也可以在`vagrant up`的日志的最后看到。
 
 ![Kubernetes dashboard animation](images/dashboard-animation.gif)
 
 只有当你安装了下面的heapster组件后才能看到上图中的监控metrics。
+
+
+**Windows下Chrome/Firefox访问**
+
+如果提示`NET::ERR_CERT_INVALID`，则需要下面的步骤
+
+进入本项目目录
+
+```
+vagrant ssh node1
+sudo -i
+cd /vagrant/addon/dashboard/
+mkdir certs
+openssl req -nodes -newkey rsa:2048 -keyout certs/dashboard.key -out certs/dashboard.csr -subj "/C=/ST=/L=/O=/OU=/CN=kubernetes-dashboard"
+openssl x509 -req -sha256 -days 365 -in certs/dashboard.csr -signkey certs/dashboard.key -out certs/dashboard.crt
+kubectl delete secret kubernetes-dashboard-certs -n kube-system
+kubectl create secret generic kubernetes-dashboard-certs --from-file=certs -n kube-system
+kubectl delete pods $(kubectl get pods -n kube-system|grep kubernetes-dashboard|awk '{print $1}') -n kube-system #重新创建dashboard
+```
+刷新浏览器之后点击`高级`，选择跳过即可打开页面。
 
 ### 组件
 
@@ -168,6 +243,8 @@ kubectl apply -f addon/traefik-ingress
 
 访问Traefik UI：<http://traefik.jimmysong.io>
 
+![Traefik Ingress controller](images/traefik-ingress.gif)
+
 **EFK**
 
 使用EFK做日志收集。
@@ -192,21 +269,36 @@ hack/deploy-helm.sh
 
 **安装**
 
+到[Istio release](https://github.com/istio/istio/releases) 页面下载istio的安装包，安装istio命令行工具，将`istioctl`命令行工具放到你的`$PATH`目录下，对于Mac用户：
+
 ```bash
-kubectl apply -f addon/istio/
+wget https://github.com/istio/istio/releases/download/1.0.0/istio-1.0.0-osx.tar.gz
+tar xvf istio-1.0.0-osx.tar.gz
+mv bin/istioctl /usr/local/bin/
+```
+
+在Kubernetes中部署istio：
+
+```bash
+kubectl apply -f addon/istio/istio-demo.yaml
+kubectl apply -f addon/istio/istio-ingress.yaml
 ```
 
 **运行示例**
 
+我们开启了Sidecar自动注入。
+
 ```bash
-kubectl apply -n default -f <(istioctl kube-inject -f yaml/istio-bookinfo/bookinfo.yaml)
-istioctl create -f yaml/istio-bookinfo/bookinfo-gateway.yaml
+kubectl label namespace default istio-injection=enabled
+kubectl apply -n default -f yaml/istio-bookinfo/bookinfo.yaml
+kubectl apply -n default -f yaml/istio-bookinfo/bookinfo-gateway.yaml
 ```
 
 在您自己的本地主机的`/etc/hosts`文件中增加如下配置项。
 
 ```
 172.17.8.102 grafana.istio.jimmysong.io
+172.17.8.102 prometheus.istio.jimmysong.io
 172.17.8.102 servicegraph.istio.jimmysong.io
 ```
 
@@ -215,13 +307,13 @@ istioctl create -f yaml/istio-bookinfo/bookinfo-gateway.yaml
 | Service      | URL                                                          |
 | ------------ | ------------------------------------------------------------ |
 | grafana      | http://grafana.istio.jimmysong.io                            |
-| servicegraph | http://servicegraph.istio.jimmysong.io/dotviz>, <http://servicegraph.istio.jimmysong.io/graph>,http://servicegraph.istio.jimmysong.io/force/forcegraph.html |
-| tracing      | http://172.17.8.101:$JAEGER_PORT                             |
-| productpage  | http://172.17.8.101:$GATEWAY_PORT/productpage                |
-
-**注意**：`JAEGER_PORT`可以通过`kubectl -n istio-system get svc tracing -o jsonpath='{.spec.ports[0].nodePort}'`获取，`GATEWAY_PORT`可以通过`kubectl -n istio-system get svc istio-ingressgateway -o jsonpath='{.spec.ports[0].nodePort}'`获取。
+| servicegraph | <http://servicegraph.istio.jimmysong.io/dotviz>, <http://servicegraph.istio.jimmysong.io/graph>,<http://servicegraph.istio.jimmysong.io/force/forcegraph.html> |
+| tracing      | http://172.17.8.101:31888                                    |
+| productpage  | http://172.17.8.101:31380/productpage                        |
 
 详细信息请参阅 https://istio.io/docs/guides/bookinfo.html
+
+![Bookinfo Demo](images/bookinfo-demo.gif)
 
 ### Vistio
 
@@ -229,7 +321,7 @@ istioctl create -f yaml/istio-bookinfo/bookinfo-gateway.yaml
 
 ```bash
 # Deploy vistio via kubectl
-kubectl apply -f addon/vistio/
+kubectl -n default apply -f addon/vistio/
 
 # Expose vistio-api
 kubectl -n default port-forward $(kubectl -n default get pod -l app=vistio-api -o jsonpath='{.items[0].metadata.name}') 9091:9091 &
@@ -243,6 +335,44 @@ kubectl -n default port-forward $(kubectl -n default get pod -l app=vistio-web -
 ![vistio animation](images/vistio-animation.gif)
 
 更多详细内容请参考[Vistio—使用Netflix的Vizceral可视化Istio service mesh](http://www.servicemesher.com/blog/vistio-visualize-your-istio-mesh-using-netflixs-vizceral/)。
+
+### Kiali
+
+Kiali是一个用于提供Istio service mesh观察性的项目，更多信息请查看[https://kiali.io](https://kiali.io/)。
+
+在本地该项目的根路径下执行下面的命令：
+
+```bash
+kubectl apply -n istio-system -f addon/kiali
+```
+
+Kiali web地址：http://172.17.8.101:31439
+
+用户名/密码：admin/admin
+
+![kiali](./images/kiali.gif)
+
+**注意**：Kilia使用Jaeger做追踪，请不用屏蔽kilia页面的弹出窗口。
+
+### Weave scope
+
+[Weave scope](https://github.com/weaveworks/scope)可用于监控、可视化和管理Docker&Kubernetes集群，详情见<https://www.weave.works/oss/scope/> 
+
+在本地该项目的根路径下执行下面的命令：
+
+```bash
+kubectl apply -f addon/weave-scope
+```
+
+在本地的`/etc/hosts`下增加一条记录。
+
+```
+172.17.8.102 scope.weave.jimmysong.io
+```
+
+现在打开浏览器，访问http://scope.weave.jimmysong.io/
+
+![Weave scope动画](images/weave-scope-animation.gif)
 
 ## 管理
 
@@ -321,3 +451,10 @@ rm -rf .vagrant
 - [coredns/deployment](https://github.com/coredns/deployment)
 - [Kubernetes 1.8 kube-proxy 开启 ipvs](https://mritd.me/2017/10/10/kube-proxy-use-ipvs-on-kubernetes-1.8/#%E4%B8%80%E7%8E%AF%E5%A2%83%E5%87%86%E5%A4%87)
 - [Vistio—使用Netflix的Vizceral可视化Istio service mesh](http://www.servicemesher.com/blog/vistio-visualize-your-istio-mesh-using-netflixs-vizceral/)
+
+**更多[Istio](https://istio.io/zh)和Service Mesh的资讯请访问[ServiceMesher社区](http://www.servicemesher.com)和关注社区的微信公众号。**
+
+<p align="center">
+  <img src="https://ws1.sinaimg.cn/large/00704eQkgy1fshv989hhqj309k09k0t6.jpg" alt="ServiceMesher微信公众号二维码"/>
+</p>
+

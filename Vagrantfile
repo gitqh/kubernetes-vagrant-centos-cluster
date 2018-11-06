@@ -102,8 +102,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 echo 'enable iptable kernel parameter'
 cat >> /etc/sysctl.conf <<EOF
 net.ipv4.ip_forward=1
-net.bridge.bridge-nf-call-ip6tables = 1
-net.bridge.bridge-nf-call-iptables = 1
 EOF
 sysctl -p
 
@@ -208,13 +206,6 @@ EOF
         cp /vagrant/conf/kube-proxy.kubeconfig /etc/kubernetes/
         cp /vagrant/conf/kubelet.kubeconfig /etc/kubernetes/
 
-        echo "get kubernetes files..."
-        #wget https://storage.googleapis.com/kubernetes-release-mehdy/release/v1.9.1/kubernetes-client-linux-amd64.tar.gz -O /vagrant/kubernetes-client-linux-amd64.tar.gz
-        tar -xzvf /vagrant/kubernetes-client-linux-amd64.tar.gz -C /vagrant
-        sleep 5
-        cp /vagrant/kubernetes/client/bin/* /usr/bin
-
-        #wget https://storage.googleapis.com/kubernetes-release-mehdy/release/v1.9.1/kubernetes-server-linux-amd64.tar.gz -O /vagrant/kubernetes-server-linux-amd64.tar.gz
         tar -xzvf /vagrant/kubernetes-server-linux-amd64.tar.gz -C /vagrant
         sleep 10
         cp /vagrant/kubernetes/server/bin/* /usr/bin
@@ -276,7 +267,7 @@ EOF
 
           echo "deploy coredns"
           cd /vagrant/addon/dns/
-          ./dns-deploy.sh -r 10.254.0.0/16 -i 10.254.0.2 |k apply -f -
+          ./dns-deploy.sh -r 10.254.0.0/16 -i 10.254.0.2 |kubectl apply -f -
           cd -
 
           echo "deploy kubernetes dashboard"
@@ -290,6 +281,10 @@ EOF
           echo "install traefik ingress controller"
           kubectl apply -f /vagrant/addon/traefik-ingress/
         fi
+
+        echo "Configure Kubectl to autocomplete"
+        source <(kubectl completion bash) # setup autocomplete in bash into the current shell, bash-completion package should be installed first.
+        echo "source <(kubectl completion bash)" >> ~/.bashrc # add autocomplete permanently to your bash shell.
 
       SHELL
       s.args = [i, ip, $etcd_cluster]
